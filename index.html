@@ -109,13 +109,7 @@ select option{background:#1e2e1e;}
       <div class="logo-sub">Terrain &amp; Vehicule</div>
     </div>
   </div>
-  <div style="display:flex;align-items:center;gap:8px">
-    <div id="fb-status" style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px">
-      <span id="fb-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block"></span>
-      <span id="fb-label">...</span>
-    </div>
-    <div style="font-size:11px;color:var(--muted)" id="headerDate"></div>
-  </div>
+  <div style="font-size:11px;color:var(--muted)" id="headerDate"></div>
 </header>
 
 <div class="tabs">
@@ -225,74 +219,15 @@ select option{background:#1e2e1e;}
 
 <div id="toast"></div>
 
-<script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getDatabase, ref, set, get, onValue, remove } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
-
-// ── CONFIG FIREBASE ──────────────────────────────────────────────
-const firebaseConfig = {
-  databaseURL: "https://reservations-e6b72-default-rtdb.firebaseio.com"
-};
-const app = initializeApp(firebaseConfig);
-const db  = getDatabase(app);
-
+<script>
 var DEFAULT_PILOTES=['Thomas Durin','Alexandre Lapadu','Baptiste Keller','Christophe Eucat','Christopher Eck','Clement Corbille','Florian Fischer','Francois Bensoussan','Joanna Damprund','Laurent Defois','Luc Poupel','Mathieu Minvielle','Mathieu Nicvert','Mayron Riols','Sebastian Silva','Florian Cabaret','Thomas Meslin','Arnaud Verzeletti','Lucien Audu','Michel Denjean','Leo Cazalaa'];
 var DEFAULT_TERRAINS=['Longages','Cessales','Argonaute','Montauban','Captieux','Toulon','Paris','Bourges','Belmont','Cintegabelle','Fosse Argonaute','Autre'];
 var DEFAULT_VEHICULES=['Ford Blanc Prod / SAV / DA-204-XB','Truck Volkswagen noir / 289APE','Baby Truck Ford Transit / OPS / GX-934-QY','FORD gris / DEV / HD-468-NB','Camions','Camion de location','Autre'];
 
-// ── DONNÉES EN MÉMOIRE (synchronisées depuis Firebase) ───────────
-var _reservations = [];
-var _lists = { pilotes: DEFAULT_PILOTES.slice(), terrains: DEFAULT_TERRAINS.slice(), vehicules: DEFAULT_VEHICULES.slice() };
-
-// ── LECTURE / ÉCRITURE FIREBASE ──────────────────────────────────
-function loadRes(){ return _reservations; }
-
-function saveRes(d){
-  _reservations = d;
-  var obj = {};
-  d.forEach(function(r){ obj['r_' + r.id] = r; });
-  set(ref(db, 'reservations'), obj).catch(function(e){ console.error('saveRes', e); });
-}
-
-function loadList(k){ return _lists[k]; }
-
-function saveList(k, d){
-  _lists[k] = d;
-  set(ref(db, 'lists/' + k), d).catch(function(e){ console.error('saveList', e); });
-}
-
-// ── INIT : écoute temps réel Firebase ───────────────────────────
-function setFbStatus(ok){
-  var dot=document.getElementById('fb-dot');
-  var lbl=document.getElementById('fb-label');
-  dot.style.background = ok ? 'var(--accent)' : 'var(--danger)';
-  lbl.textContent = ok ? 'Sync' : 'Hors ligne';
-}
-
-function initFirebase(){
-  // Statut connexion
-  onValue(ref(db, '.info/connected'), function(snap){
-    setFbStatus(snap.val() === true);
-  });
-
-  // Réservations
-  onValue(ref(db, 'reservations'), function(snap){
-    var data = snap.val();
-    _reservations = data ? Object.values(data) : [];
-    renderList(currentFilter);
-    renderCal();
-  });
-
-  // Listes pilotes / terrains / véhicules
-  ['pilotes','terrains','vehicules'].forEach(function(k){
-    var defVal = k==='pilotes' ? DEFAULT_PILOTES : k==='terrains' ? DEFAULT_TERRAINS : DEFAULT_VEHICULES;
-    onValue(ref(db, 'lists/' + k), function(snap){
-      _lists[k] = snap.val() || defVal.slice();
-      populateSelects();
-      renderManage();
-    });
-  });
-}
+function loadRes(){try{return JSON.parse(localStorage.getItem('res_v3'))||[];}catch(e){return[];}}
+function saveRes(d){localStorage.setItem('res_v3',JSON.stringify(d));}
+function loadList(k,def){var s=localStorage.getItem('list_'+k);return s?JSON.parse(s):def.slice();}
+function saveList(k,d){localStorage.setItem('list_'+k,JSON.stringify(d));}
 
 function today(){return new Date().toISOString().split('T')[0];}
 function fmtDate(d){if(!d)return'--';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
@@ -311,9 +246,9 @@ function switchTab(name,el){
 }
 
 function populateSelects(){
-  var pilotes=loadList('pilotes');
-  var terrains=loadList('terrains');
-  var vehicules=loadList('vehicules');
+  var pilotes=loadList('pilotes',DEFAULT_PILOTES);
+  var terrains=loadList('terrains',DEFAULT_TERRAINS);
+  var vehicules=loadList('vehicules',DEFAULT_VEHICULES);
   function fill(id,items,ph){
     var sel=document.getElementById(id);
     sel.innerHTML='<option value="">-- '+ph+' --</option>'+items.map(function(i){return'<option>'+i+'</option>';}).join('');
@@ -324,9 +259,9 @@ function populateSelects(){
 }
 
 function renderManage(){
-  [['pilotes'],['terrains'],['vehicules']].forEach(function(pair){
-    var key=pair[0];
-    var items=loadList(key);
+  [['pilotes',DEFAULT_PILOTES],['terrains',DEFAULT_TERRAINS],['vehicules',DEFAULT_VEHICULES]].forEach(function(pair){
+    var key=pair[0],def=pair[1];
+    var items=loadList(key,def);
     var c=document.getElementById('manage-'+key);
     if(!items.length){c.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px 0">Aucun element</div>';return;}
     c.innerHTML=items.map(function(item,i){
@@ -339,7 +274,8 @@ function addItem(key,inputId){
   var input=document.getElementById(inputId);
   var val=input.value.trim();
   if(!val)return;
-  var items=loadList(key);
+  var def=key==='pilotes'?DEFAULT_PILOTES:key==='terrains'?DEFAULT_TERRAINS:DEFAULT_VEHICULES;
+  var items=loadList(key,def);
   if(items.indexOf(val)>=0){showToast('Deja dans la liste');return;}
   items.push(val);
   saveList(key,items);
@@ -350,7 +286,8 @@ function addItem(key,inputId){
 }
 
 function removeItem(key,index){
-  var items=loadList(key);
+  var def=key==='pilotes'?DEFAULT_PILOTES:key==='terrains'?DEFAULT_TERRAINS:DEFAULT_VEHICULES;
+  var items=loadList(key,def);
   items.splice(index,1);
   saveList(key,items);
   renderManage();
@@ -360,9 +297,13 @@ function removeItem(key,index){
 
 function detectConflicts(reservations,newRes){
   var c={terrain:[],vehicule:[]};
+  var newStart=new Date(newRes.dateDebut+'T'+(newRes.heureDebut||'00:00'));
+  var newEnd=new Date(newRes.dateFin+'T'+(newRes.heureFin||'23:59'));
   reservations.forEach(function(r){
     if(r.id===newRes.id)return;
-    var overlap=newRes.dateDebut<=r.dateFin&&newRes.dateFin>=r.dateDebut;
+    var rStart=new Date(r.dateDebut+'T'+(r.heureDebut||'00:00'));
+    var rEnd=new Date(r.dateFin+'T'+(r.heureFin||'23:59'));
+    var overlap=newStart<rEnd&&newEnd>rStart;
     if(!overlap)return;
     if(r.terrain===newRes.terrain)c.terrain.push(r);
     if(r.vehicule===newRes.vehicule)c.vehicule.push(r);
@@ -391,7 +332,7 @@ function submitReservation(force){
   }
 
   var reservations=loadRes();
-  var conflicts=detectConflicts(reservations,{dateDebut:dateDebut,dateFin:dateFin,terrain:terrain,vehicule:vehicule,id:null});
+  var conflicts=detectConflicts(reservations,{dateDebut:dateDebut,dateFin:dateFin,heureDebut:heureDebut,heureFin:heureFin,terrain:terrain,vehicule:vehicule,id:null});
 
   if(conflicts.vehicule.length>0){
     var names=conflicts.vehicule.map(function(r){return r.pilote+' ('+fmtDate(r.dateDebut)+')';}).join(', ');
@@ -518,22 +459,9 @@ function updateHeaderDate(){
   document.getElementById('headerDate').textContent=days[now.getDay()]+' '+now.getDate()+' '+months[now.getMonth()];
 }
 
-// ── EXPOSITION GLOBALE (nécessaire avec type="module") ───────────
-window.switchTab = switchTab;
-window.submitReservation = submitReservation;
-window.confirmForce = confirmForce;
-window.closeModal = closeModal;
-window.filterList = filterList;
-window.deleteRes = deleteRes;
-window.calPrev = calPrev;
-window.calNext = calNext;
-window.showCalDetail = showCalDetail;
-window.addItem = addItem;
-window.removeItem = removeItem;
-
 updateHeaderDate();
 initCal();
-initFirebase();
+populateSelects();
 document.getElementById('f-date-debut').value=today();
 document.getElementById('f-date-fin').value=today();
 </script>
